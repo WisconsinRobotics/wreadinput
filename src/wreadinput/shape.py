@@ -1,5 +1,6 @@
 from typing import Collection, Dict, Set
 
+from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceCaps, DeviceEventType, DeviceKey
 
 class DeviceShape:
@@ -27,13 +28,10 @@ class DeviceShape:
             and check_caps(caps, DeviceEventType.EV_KEY, self.keys.keys())
 
 def check_caps(caps: DeviceCaps, ev_type: DeviceEventType, expected: Collection[int]) -> bool:
-    if len(expected) == 0:
-        if ev_type in caps and len(caps[ev_type]) > 0:
-            return False
-    else:
+    if len(expected) > 0:
         if ev_type not in caps:
             return False
-        supported_codes = set(caps[ev_type])
+        supported_codes = set(evdev_util.get_capability_codes(caps[ev_type]))
         for exp_code in expected:
             if exp_code not in supported_codes:
                 return False

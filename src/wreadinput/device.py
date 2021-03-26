@@ -3,6 +3,7 @@ from typing import Dict, Iterator, Optional, cast
 
 import evdev
 
+from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceEventType, DeviceKey, SyncEvent
 
 class AxisBuf:
@@ -45,7 +46,8 @@ class InputDevice:
         self._key_cache: Dict[DeviceKey, KeyBuf] = {}
         self._data_lock = Lock()
 
-        for ev_type, ev_codes in self._dev.capabilities():
+        for ev_type, ev_caps in self._dev.capabilities().items():
+            ev_codes = evdev_util.get_capability_codes(ev_caps)
             if ev_type == DeviceEventType.EV_ABS:
                 for code in ev_codes:
                     axis_info = self._dev.absinfo(code)
@@ -77,7 +79,7 @@ class InputDevice:
             with self._thread_lock:
                 if self._dev.fd == -1:
                     return
-            
+            # FIXME event loop deadlocks if the device dies!
             for event in cast(Iterator[evdev.InputEvent], self._dev.read_loop()):
                 if event.type == DeviceEventType.EV_ABS: # axis state event
                     if syn_okay:
