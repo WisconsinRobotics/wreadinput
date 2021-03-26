@@ -89,7 +89,7 @@ class DeviceAxis(IntEnum):
     ABS_WHEEL = 0x08
     ABS_GAS = 0x09
     ABS_BRAKE = 0x0A
-    ABS_HAT0x = 0x10
+    ABS_HAT0X = 0x10
     ABS_HAT0Y = 0x11
     ABS_HAT1X = 0x12
     ABS_HAT1Y = 0x13
