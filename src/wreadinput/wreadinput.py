@@ -1,12 +1,16 @@
-from typing import List, cast
+from typing import ContextManager, List, Optional, cast
 
 import evdev
 import rospy
 from wready import WReadyClient
 
-from wreadinput import AxisPublisher, ControlPublisher, DeviceCaps, DeviceFinder, DeviceShape, InputDevice, KeyPublisher
+from .control import AxisPublisher, ControlPublisher, KeyPublisher
+from .device import InputDevice
+from .finder import DeviceFinder
+from .shape import DeviceShape
+from .util.evdev_const import DeviceCaps
 
-class WReadInput:
+class WReadInput(ContextManager['WReadInput']):
     def __init__(self, device: InputDevice, shape: DeviceShape):
         self._device = device
         self._shape = shape
@@ -22,6 +26,9 @@ class WReadInput:
                 rospy.loginfo(f'Discovered {len(devs)} devices')
                 devs = list(filter(lambda d: shape.match(cast(DeviceCaps, d.capabilities())), devs))
                 rospy.loginfo(f'Matched {len(devs)} correctly-shaped devices')
+                if len(devs) == 0:
+                    task.report_progress('No correctly-shaped devices could be found!', 1)
+                    raise ValueError('No correctly-shaped devices could be found!')
                 
                 rospy.loginfo(f'Waiting for an input...')
                 with DeviceFinder(devs) as dev_finder:
@@ -32,13 +39,15 @@ class WReadInput:
         finally:
             wready.kill()
 
-    def spin(self, ns: str, spin_rate: float = 60):
+    def spin(self, ns: Optional[str] = None, spin_rate: float = 60):
+        namespace = '~' if ns is None else f'{ns}/'
+
         rospy.loginfo('Initializing ROS transports...')
         controls: List[ControlPublisher] = []
         for axis, name in self._shape.axes.items():
-            controls.append(AxisPublisher(self._device, axis, name))
+            controls.append(AxisPublisher(self._device, axis, f'{namespace}{name}'))
         for key, name in self._shape.keys.items():
-            controls.append(KeyPublisher(self._device, key, name))
+            controls.append(KeyPublisher(self._device, key, f'{namespace}{name}'))
 
         rospy.loginfo('Starting evdev thread...')
         self._device.start()
@@ -49,3 +58,10 @@ class WReadInput:
             for publisher in controls:
                 publisher.publish()
             sleeper.sleep()
+        rospy.loginfo('Cleaning up...')
+
+    def __enter__(self) -> 'WReadInput':
+        return self
+
+    def __exit__(self, *exc):
+        self._device.kill()
