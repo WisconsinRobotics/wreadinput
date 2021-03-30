@@ -45,9 +45,9 @@ class WReadInput(ContextManager['WReadInput']):
         rospy.loginfo('Initializing ROS transports...')
         controls: List[ControlPublisher] = []
         for axis, name in self._shape.axes.items():
-            controls.append(AxisPublisher(self._device, axis, f'{namespace}{name}'))
+            controls.append(AxisPublisher(self._device, axis, f'{namespace}axis/{name}'))
         for key, name in self._shape.keys.items():
-            controls.append(KeyPublisher(self._device, key, f'{namespace}{name}'))
+            controls.append(KeyPublisher(self._device, key, f'{namespace}button/{name}'))
 
         rospy.loginfo('Starting evdev thread...')
         self._device.start()

@@ -1,3 +1,5 @@
+from . import default_node
+
 from .control import *
 from .device import InputDevice
 from .finder import DeviceFinder
