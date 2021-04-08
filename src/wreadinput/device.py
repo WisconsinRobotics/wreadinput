@@ -5,6 +5,7 @@ from threading import Lock, Thread
 from typing import Dict, Iterator, Optional, Tuple, cast
 
 import evdev
+import rospy
 
 from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceEventType, DeviceKey, SyncEvent
@@ -79,6 +80,8 @@ class InputDevice:
         notify_pipe_r, notify_pipe_w = os.pipe2(os.O_NONBLOCK)
 
         def poll():
+            rospy.loginfo('Initializing evdev thread state...')
+            
             axis_temp: Dict[int, int] = dict()
             key_temp: Dict[int, int] = dict()
             syn_okay = True
@@ -138,6 +141,7 @@ class InputDevice:
             # check to ensure that the device is still there; better safe than sorry
             with self._thread_lock:
                 if self._dev.fd == -1:
+                    rospy.loginfo('Device was dead before the evdev thread was ready!')
                     return
 
             with open(notify_pipe_r, 'rb') as notify_pipe_file:
@@ -146,6 +150,7 @@ class InputDevice:
                 sel.register(self._dev, selectors.EVENT_READ)
                 sel.register(notify_pipe_file, selectors.EVENT_READ)
                 
+                rospy.loginfo('Entering evdev polling loop...')
                 while True:
                     # read events
                     for key, _ in sel.select():
@@ -153,11 +158,13 @@ class InputDevice:
                             for event in cast(Iterator[evdev.InputEvent], self._dev.read()):
                                 consume_event(event)
                         else: # must be the virtual pipe
+                            rospy.loginfo('Received notification from virtual pipe!')
                             cast(BytesIO, key.fileobj).read()
                     
                     # terminate if the device is closed
                     with self._thread_lock:
-                        if self._dev.fd == -1:                            
+                        if self._dev.fd == -1:
+                            rospy.loginfo('The device was closed! Terminating the evdev thread...')
                             break
         
         poll_thread = Thread(target=poll)
