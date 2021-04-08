@@ -1,5 +1,8 @@
+from io import BytesIO
+import os
+import selectors
 from threading import Lock, Thread
-from typing import Dict, Iterator, Optional, cast
+from typing import Dict, Iterator, Optional, Tuple, cast
 
 import evdev
 
@@ -39,7 +42,7 @@ class InputDevice:
     def __init__(self, dev_file: str):
         self._dev = evdev.InputDevice(dev_file)
 
-        self._poll_thread: Optional[Thread] = None
+        self._poll_thread_ctx: Optional[Tuple[Thread, int]] = None # thread and notify pipe
         self._thread_lock = Lock()
         
         self._axis_cache: Dict[DeviceAxis, AxisBuf] = {}
@@ -68,19 +71,20 @@ class InputDevice:
         with self._thread_lock:
             if self._dev.fd == -1:
                 raise ValueError('Device is already closed!')
-            elif self._poll_thread is not None:
+            elif self._poll_thread_ctx is not None:
                 raise ValueError('Poll thread already exists!')
+
+        # may deadlock if the device is lost, since the selector will never receive an event
+        # so we add a virtual pipe for the selector to read from that we can use to "break out"
+        notify_pipe_r, notify_pipe_w = os.pipe2(os.O_NONBLOCK)
 
         def poll():
             axis_temp: Dict[int, int] = dict()
             key_temp: Dict[int, int] = dict()
             syn_okay = True
             
-            with self._thread_lock:
-                if self._dev.fd == -1:
-                    return
-            # FIXME event loop deadlocks if the device dies!
-            for event in cast(Iterator[evdev.InputEvent], self._dev.read_loop()):
+            def consume_event(event: evdev.InputEvent):
+                nonlocal syn_okay
                 if event.type == DeviceEventType.EV_ABS: # axis state event
                     if syn_okay:
                         try:
@@ -130,13 +134,36 @@ class InputDevice:
                         axis_temp.clear()
                         key_temp.clear()
                         syn_okay = False
-                with self._thread_lock:
-                    if self._dev.fd == -1:
-                        break
+
+            # check to ensure that the device is still there; better safe than sorry
+            with self._thread_lock:
+                if self._dev.fd == -1:
+                    return
+
+            with open(notify_pipe_r, 'rb') as notify_pipe_file:
+                # use selector to join the device and the virtual "break-out" pipe
+                sel = selectors.DefaultSelector()
+                sel.register(self._dev, selectors.EVENT_READ)
+                sel.register(notify_pipe_file, selectors.EVENT_READ)
+                
+                while True:
+                    # read events
+                    for key, _ in sel.select():
+                        if key.fileobj == self._dev:
+                            for event in cast(Iterator[evdev.InputEvent], self._dev.read()):
+                                consume_event(event)
+                        else: # must be the virtual pipe
+                            cast(BytesIO, key.fileobj).read()
+                    
+                    # terminate if the device is closed
+                    with self._thread_lock:
+                        if self._dev.fd == -1:                            
+                            break
         
-        self._poll_thread = Thread(target=poll)
-        self._poll_thread.daemon = True
-        self._poll_thread.start()
+        poll_thread = Thread(target=poll)
+        poll_thread.daemon = True
+        poll_thread.start()
+        self._poll_thread_ctx = poll_thread, notify_pipe_w
 
     def get_axis(self, axis: DeviceAxis) -> Optional[float]:
         with self._data_lock:
@@ -151,5 +178,8 @@ class InputDevice:
     def kill(self):
         with self._thread_lock:
             self._dev.close()
-        if self._poll_thread is not None:
-            self._poll_thread.join()
+        if self._poll_thread_ctx is not None:
+            os.write(self._poll_thread_ctx[1], b'\0') # write some random byte to break out of the selector read
+            os.close(self._poll_thread_ctx[1])
+            self._poll_thread_ctx[0].join()
+            self._poll_thread_ctx = None
