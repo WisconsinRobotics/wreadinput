@@ -24,18 +24,24 @@ class WReadInput(ContextManager['WReadInput']):
                 task.report_progress(f'Polling for controllers...')
                 devs = [evdev.InputDevice(dev_file) for dev_file in evdev.list_devices()]
                 rospy.loginfo(f'Discovered {len(devs)} devices')
-                devs = list(filter(lambda d: shape.match(cast(DeviceCaps, d.capabilities())), devs))
-                rospy.loginfo(f'Matched {len(devs)} correctly-shaped devices')
-                if len(devs) == 0:
-                    task.report_progress('No correctly-shaped devices could be found!', 1)
-                    raise ValueError('No correctly-shaped devices could be found!')
-                
-                rospy.loginfo(f'Waiting for an input...')
-                with DeviceFinder(devs) as dev_finder:
-                    task.report_progress(f'Press any button on controller "{name}"!', 0.5)
-                    device = dev_finder.get()
-                    rospy.loginfo(f'Acquired device: {device.name}')
-                    return WReadInput(InputDevice(device), shape)
+                found_device: Optional[evdev.InputDevice] = None
+                try:
+                    devs = list(filter(lambda d: shape.match(cast(DeviceCaps, d.capabilities())), devs))
+                    rospy.loginfo(f'Matched {len(devs)} correctly-shaped devices')
+                    if len(devs) == 0:
+                        task.report_progress('No correctly-shaped devices could be found!', 1)
+                        raise ValueError('No correctly-shaped devices could be found!')
+                    
+                    rospy.loginfo(f'Waiting for an input...')
+                    with DeviceFinder(devs) as dev_finder:
+                        task.report_progress(f'Press any button on controller "{name}"!', 0.5)
+                        found_device = dev_finder.get()
+                        rospy.loginfo(f'Acquired device: {found_device.name}')
+                        return WReadInput(InputDevice(found_device), shape)
+                finally:
+                    for dev in devs:
+                        if dev is not found_device:
+                            dev.close()
         finally:
             wready.kill()
 
