@@ -2,7 +2,7 @@ from io import BytesIO
 import os
 import selectors
 from threading import Lock, Thread
-from typing import Dict, Iterator, Optional, Tuple, cast
+from typing import Dict, Iterator, Optional, Tuple, Union, cast
 
 import evdev
 import rospy
@@ -40,8 +40,8 @@ class KeyBuf:
         self.value = init_value
 
 class InputDevice:
-    def __init__(self, dev_file: str):
-        self._dev = evdev.InputDevice(dev_file)
+    def __init__(self, device: Union[str, evdev.InputDevice]):
+        self._dev = device if isinstance(device, evdev.InputDevice) else evdev.InputDevice(device)
 
         self._poll_thread_ctx: Optional[Tuple[Thread, int]] = None # thread and notify pipe
         self._thread_lock = Lock()
@@ -160,7 +160,7 @@ class InputDevice:
                         else: # must be the virtual pipe
                             rospy.loginfo('Received notification from virtual pipe!')
                             cast(BytesIO, key.fileobj).read()
-                    
+
                     # terminate if the device is closed
                     with self._thread_lock:
                         if self._dev.fd == -1:
@@ -168,7 +168,6 @@ class InputDevice:
                             break
         
         poll_thread = Thread(target=poll)
-        poll_thread.daemon = True
         poll_thread.start()
         self._poll_thread_ctx = poll_thread, notify_pipe_w
 
