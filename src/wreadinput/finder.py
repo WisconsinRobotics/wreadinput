@@ -1,6 +1,5 @@
 import selectors
-import threading
-from typing import Any, ContextManager, Iterable, Iterator, List, Optional, Tuple, cast
+from typing import ContextManager, Iterable, Iterator, List, Optional, cast
 from wready import SignalInterruptHandler
 
 import evdev
