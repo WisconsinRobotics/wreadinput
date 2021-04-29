@@ -23,5 +23,6 @@ SHAPE_LOGX3DPRO = DeviceShape()\
     .with_key(DeviceKey.BTN_BASE5, '11')\
     .with_key(DeviceKey.BTN_BASE6, '12')
 
+# see `wreadinput.default_node` for implementation details
 if __name__ == '__main__':
     default_node.main('input_logx3dpro', SHAPE_LOGX3DPRO)

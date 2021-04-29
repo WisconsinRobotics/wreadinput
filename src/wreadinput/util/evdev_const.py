@@ -7,9 +7,18 @@ DeviceCaps = Dict[int, List[int]]
 # https://www.kernel.org/doc/Documentation/input/input.txt
 EVENT_STRUCT = Struct('llHHI')
 
-# https://www.kernel.org/doc/Documentation/input/event-codes.txt
-# https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
 class DeviceEventType(IntEnum):
+    """Constants for evdev event types.
+
+    See [1]_ for a list of event types and [2]_ for their
+    declarations in the Linux evdev source code.
+    
+    References
+    ----------
+    .. [1] https://www.kernel.org/doc/Documentation/input/event-codes.txt
+    .. [2] https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h#L34
+    """
+    
     EV_SYN = 0x00
     EV_KEY = 0x01
     EV_REL = 0x02
@@ -25,6 +34,15 @@ class DeviceEventType(IntEnum):
     EV_MAX = 0x1F
 
 class DeviceKey(IntEnum):
+    """Constants for evdev keys.
+
+    See [1]_ for the constant declarations in the Linux evdev
+    source code.
+
+    References
+    ----------
+    .. [1] https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h#L64
+    """
     BTN_0 = 0x100
     BTN_1 = 0x101
     BTN_2 = 0x102
@@ -78,6 +96,15 @@ class DeviceKey(IntEnum):
     BTN_GEAR_UP = 0x151
 
 class DeviceAxis(IntEnum):
+    """Constants for evdev absolute axes.
+
+    See [1]_ for the constant declarations in the Linux evdev
+    source code.
+
+    References
+    ----------
+    .. [1] https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h#L811
+    """
     ABS_X = 0x00
     ABS_Y = 0x01
     ABS_Z = 0x02
@@ -108,6 +135,15 @@ class DeviceAxis(IntEnum):
     ABS_MISC = 0x28
 
 class SyncEvent(IntEnum):
+    """Constants for evdev device sync event types.
+
+    See [1]_ for the constant declarations in the Linux evdev
+    source code.
+
+    References
+    ----------
+    .. [1] https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h#L53
+    """
     SYN_REPORT = 0
     SYN_CONFIG = 1
     SYN_MT_REPORT = 2

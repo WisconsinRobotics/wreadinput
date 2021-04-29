@@ -11,36 +11,132 @@ from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceEventType, DeviceKey, SyncEvent
 
 class AxisBuf:
+    """A buffer storing the state of a single absolute axis on an input device.
+    
+    Some normalization is performed so that axis values are uniform across different
+    axes. Usually, the normalized values will be on the interval [-1, 1].
+    """
+
     def __init__(self, init_value: float, unmapped_min: float, unmapped_max: float):
+        """Creates a new buffer for an absolute axis with the given properties.
+
+        The `unmapped_min` and `unmapped_max` will be used to remap axis values to a
+        normalized interval in the following way: if the axis is bidirectional (that
+        is, its range is [-x, x] for some x), then it is remapped to the unit ball:
+
+        .. math:: [-x, x] \\mapsto [-1, 1]
+        
+        Otherwise, if the axis is unidirectional (that is, its range is either [0, x]
+        or [x, 0]), then it is remapped to a unit interval in that direction:
+
+        .. math::
+            
+            [0, x] \\mapsto [0, 1]\\\\
+            [x, 0] \\mapsto [-1, 0]
+
+        This normalization allows axes to be treated in a uniform way regardless of
+        the specific device or axis being referred to.
+
+        Parameters
+        ----------
+        init_value : float
+            The initial unnormalized value for the axis.
+        unmapped_min : float
+            The minimum unnormalized value for the axis.
+        unmapped_max : float
+            The maximum unnormalized value for the axis.
+        """
         self._offset: float
         self._scale: float
-        if unmapped_min == 0 and unmapped_max > 0:
+        if unmapped_min == 0 and unmapped_max > 0: # unidirectional upwards
             self._offset = 0
             self._scale = 1 / unmapped_max
-        elif unmapped_max == 0 and unmapped_min < 0:
+        elif unmapped_max == 0 and unmapped_min < 0: # unidirectional downwards
             self._offset = 0
             self._scale = 1 / abs(unmapped_min)
-        else:
+        else: # bidirectional
             self._offset = -(unmapped_min + unmapped_max) / 2
             self._scale = 2 / (unmapped_max - unmapped_min)
         self._value = self._remap(init_value)
     
     @property
     def value(self) -> float:
+        """The current normalized value of the axis.
+
+        Returns
+        -------
+        float
+            The normalized axis value.
+        """
         return self._value
 
     def update(self, unmapped_value: float):
+        """Writes a new value the buffer.
+
+        Parameters
+        ----------
+        unmapped_value : float
+            The unnormalized axis value.
+        """
         self._value = self._remap(unmapped_value)
 
     def _remap(self, unmapped_value: float) -> float:
+        """Normalizes an axis value.
+
+        Parameters
+        ----------
+        unmapped_value : float
+            The unnormalized axis value.
+
+        Returns
+        -------
+        float
+            The normalized axis value.
+        """
         return (unmapped_value + self._offset) * self._scale
 
 class KeyBuf:
+    """A buffer storing the state of a single button on an input device.
+    
+    Considerably simpler than the axis buffer.
+    """
+    
     def __init__(self, init_value: bool):
+        """Creates a new buffer for a button.
+
+        Parameters
+        ----------
+        init_value : bool
+            The initial state of the button.
+        """
         self.value = init_value
 
 class InputDevice:
+    """Represents a single input device and all of its state.
+    
+    Instances of this class maintain a polling thread that consumes evdev events.
+    To ensure that the thread is cleaned up and to prevent deadlocks, users of this
+    class should make sure to call `kill` on an instance when it is no longer needed.
+    """
+    
     def __init__(self, device: Union[str, evdev.InputDevice]):
+        """Constructs a new `InputDevice` instance for the given device.
+
+        The device will be polled for capabilities, which will allow for the creation
+        of state buffers for each axis and button on the device. To start the evdev
+        polling thread, call `start`; the `InputDevice` will not be able to track the
+        device's state until then.
+
+        Parameters
+        ----------
+        device : Union[str, evdev.InputDevice]
+            The device, given either as a path to a device file or as an instance of
+            `evdev.InputDevice`.
+        
+        See Also
+        --------
+        start : Initializes evdev polling.
+        """
         self._dev = device if isinstance(device, evdev.InputDevice) else evdev.InputDevice(device)
 
         self._poll_thread_ctx: Optional[Tuple[Thread, int]] = None # thread and notify pipe
@@ -50,6 +146,7 @@ class InputDevice:
         self._key_cache: Dict[DeviceKey, KeyBuf] = {}
         self._data_lock = Lock()
 
+        # construct axis and key buffers based on the device's advertised capabilities
         for ev_type, ev_caps in self._dev.capabilities().items():
             ev_codes = evdev_util.get_capability_codes(ev_caps)
             if ev_type == DeviceEventType.EV_ABS:
@@ -69,6 +166,32 @@ class InputDevice:
                         pass
         
     def start(self):
+        """Initializes the evdev polling thread.
+
+        This is what allows for the tracking of the device's state. Once this device
+        is no longer needed, the `kill` method should be called to ensure that the
+        polling thread is cleaned up properly in order to prevent resource leaks and
+        deadlocks.
+
+        Raises
+        ------
+        ValueError
+            If the polling thread has already been started, or if the device has
+            already been shut down.
+        
+        Notes
+        -----
+        Evdev events are organized into "frames", each of which is separated by an
+        EV_SYN event of code SYN_REPORT. Inputs should only be considered committed
+        when a whole frame has been sent. In the case where the event buffer overflows,
+        events will be lost, in which case the frame may be incomplete. This is
+        indicated by an EV_SYN event of code SYN_DROPPED, which signals to us that we
+        need to resynchronize with the frames. See [1]_ for more details.
+
+        References
+        ----------
+        .. [1] https://www.freedesktop.org/software/libevdev/doc/latest/syn_dropped.html
+        """
         with self._thread_lock:
             if self._dev.fd == -1:
                 raise ValueError('Device is already closed!')
@@ -82,9 +205,9 @@ class InputDevice:
         def poll():
             rospy.loginfo('Initializing evdev thread state...')
             
-            axis_temp: Dict[int, int] = dict()
+            axis_temp: Dict[int, int] = dict() # temp buffers for the current incomplete frame
             key_temp: Dict[int, int] = dict()
-            syn_okay = True
+            syn_okay = True # if SYN_DROPPED, this becomes false to indicate that the frame is fragmented
             
             def consume_event(event: evdev.InputEvent):
                 nonlocal syn_okay
@@ -98,7 +221,6 @@ class InputDevice:
                     if syn_okay:
                         try:
                             key_temp[DeviceKey(event.code)] = event.value
-                            evdev.categorize
                         except ValueError:
                             pass
                 elif event.type == DeviceEventType.EV_SYN: # synchronization event
@@ -145,7 +267,7 @@ class InputDevice:
                     return
 
             with open(notify_pipe_r, 'rb') as notify_pipe_file:
-                # use selector to join the device and the virtual "break-out" pipe
+                # use selector to conjoin the device and the virtual "break-out" pipe
                 sel = selectors.DefaultSelector()
                 sel.register(self._dev, selectors.EVENT_READ)
                 sel.register(notify_pipe_file, selectors.EVENT_READ)
@@ -154,7 +276,7 @@ class InputDevice:
                 while True:
                     # read events
                     for key, _ in sel.select():
-                        if key.fileobj == self._dev:
+                        if key.fileobj == self._dev: # it's from evdev
                             for event in cast(Iterator[evdev.InputEvent], self._dev.read()):
                                 consume_event(event)
                         else: # must be the virtual pipe
@@ -172,16 +294,47 @@ class InputDevice:
         self._poll_thread_ctx = poll_thread, notify_pipe_w
 
     def get_axis(self, axis: DeviceAxis) -> Optional[float]:
+        """Retrieves the state of an absolute axis.
+
+        The axis value will be normalized. See the `AxisBuf` class for more details.
+
+        Parameters
+        ----------
+        axis : DeviceAxis
+            The axis whose state should be queried.
+
+        Returns
+        -------
+        Optional[float]
+            The axis' state, or `None` if there is no data available for it.
+        """
         with self._data_lock:
             axis_buf = self._axis_cache.get(axis)
             return axis_buf.value if axis_buf is not None else None
 
     def get_key(self, key: DeviceKey) -> Optional[bool]:
+        """Retrieves the state of a button.
+
+        Parameters
+        ----------
+        key : DeviceKey
+            The button whose state should be queried.
+
+        Returns
+        -------
+        Optional[bool]
+            The button's state, or `None` if there is no data available for it.
+        """
         with self._data_lock:
             key_buf = self._key_cache.get(key)
             return key_buf.value if key_buf is not None else None
 
     def kill(self):
+        """Shuts down the device.
+        
+        This closes any relevant file handles and terminates the polling thread.
+        The `InputDevice` instance can no longer be used once this is done.
+        """
         with self._thread_lock:
             self._dev.close()
         if self._poll_thread_ctx is not None:
