@@ -27,7 +27,7 @@ class WReadInput(ContextManager['WReadInput']):
             wreadinput.spin(dev_ns)
     """
     
-    def __init__(self, device: InputDevice, shape: DeviceShape):
+    def __init__(self, device: InputDevice):
         """Constructs a new WReadInput system wrapping the given input device.
 
         The names for the controls given by the device shape determine the names of
@@ -37,11 +37,9 @@ class WReadInput(ContextManager['WReadInput']):
         ----------
         device : InputDevice
             The input device to publish control data for.
-        shape : DeviceShape
-            The shape of the input device.
         """
         self._device = device
-        self._shape = shape
+        self._shape = device.shape
 
     @staticmethod
     def find(name: str, shape: DeviceShape, wready_server_ns: str) -> 'WReadInput':
@@ -97,7 +95,7 @@ class WReadInput(ContextManager['WReadInput']):
                         task.report_progress(f'Press any button on controller "{name}"!', 0.5)
                         found_device = dev_finder.get()
                         rospy.loginfo(f'Acquired device: {found_device.name}')
-                        return WReadInput(InputDevice(found_device), shape)
+                        return WReadInput(InputDevice(found_device, shape))
                 finally:
                     for dev in devs:
                         if dev is not found_device:

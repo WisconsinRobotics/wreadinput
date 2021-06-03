@@ -121,6 +121,7 @@ class InputDevice:
         --------
         start : Initializes evdev polling.
         """
+        self.shape = shape
         self._dev = device if isinstance(device, evdev.InputDevice) else evdev.InputDevice(device)
 
         self._poll_thread_ctx: Optional[Tuple[Thread, int]] = None # thread and notify pipe
