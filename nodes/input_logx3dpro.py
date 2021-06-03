@@ -7,7 +7,7 @@ SHAPE_LOGX3DPRO = DeviceShape()\
     .with_axis(DeviceAxis.ABS_X, 'stick_x')\
     .with_axis(DeviceAxis.ABS_Y, 'stick_y')\
     .with_axis(DeviceAxis.ABS_RZ, 'stick_twist')\
-    .with_axis(DeviceAxis.ABS_THROTTLE, 'throttle')\
+    .with_axis(DeviceAxis.ABS_THROTTLE, 'throttle', 0, 1)\
     .with_axis(DeviceAxis.ABS_HAT0X, 'pov_x')\
     .with_axis(DeviceAxis.ABS_HAT0Y, 'pov_y')\
     .with_key(DeviceKey.BTN_TRIGGER, 'trigger')\

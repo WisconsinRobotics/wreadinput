@@ -3,6 +3,25 @@ from typing import Collection, Dict, Set
 from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceCaps, DeviceEventType, DeviceKey
 
+class AxisDefinition:
+    """Represents an absolute axis declaration in a device shape."""
+    
+    def __init__(self, name: str, min_val: float, max_val: float):
+        """Creates a new axis definition with the given properties.
+
+        Parameters
+        ----------
+        name : str
+            The name of the axis.
+        min_val : float
+            The minimum value to output for the axis.
+        max_val : float
+            The maximum value to output for the axis.
+        """
+        self.name = name
+        self.min_val = min_val
+        self.max_val = max_val
+
 class DeviceShape:
     """Represents the set of controls that are characteristic of an input device.
     
@@ -14,19 +33,21 @@ class DeviceShape:
     
     def __init__(self):
         """Constructs a new device shape that initially has no controls specified."""
-        self.axes: Dict[DeviceAxis, str] = {}
+        self.axes: Dict[DeviceAxis, AxisDefinition] = {}
         self.keys: Dict[DeviceKey, str] = {}
         self._names: Set[str] = set() # track the names that have already been used
 
-    def with_axis(self, axis: DeviceAxis, name: str) -> 'DeviceShape':
+    def with_axis(self, axis: DeviceAxis, name: str, min_val: float = -1, max_val: float = 1) -> 'DeviceShape':
         """Specifies an absolute axis for the device shape.
 
         Parameters
         ----------
         axis : DeviceAxis
             The absolute axis to specify.
-        name : str
-            The name of the absolute axis.
+        min_val : float
+            The minimum value to output for the axis.
+        max_val : float
+            The maximum value to output for the axis.
 
         Returns
         -------
@@ -40,7 +61,7 @@ class DeviceShape:
         """
         if name in self._names:
             raise ValueError(f'A control named "{name}" already exists!')
-        self.axes[axis] = name
+        self.axes[axis] = AxisDefinition(name, min_val, max_val)
         self._names.add(name)
         return self
 

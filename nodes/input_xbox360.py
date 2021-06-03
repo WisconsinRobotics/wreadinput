@@ -8,8 +8,8 @@ SHAPE_XBOX360 = DeviceShape()\
     .with_axis(DeviceAxis.ABS_Y, 'stick_left_y')\
     .with_axis(DeviceAxis.ABS_RX, 'stick_right_x')\
     .with_axis(DeviceAxis.ABS_RY, 'stick_right_y')\
-    .with_axis(DeviceAxis.ABS_Z, 'trigger_left')\
-    .with_axis(DeviceAxis.ABS_RZ, 'trigger_right')\
+    .with_axis(DeviceAxis.ABS_Z, 'trigger_left', 0, 1)\
+    .with_axis(DeviceAxis.ABS_RZ, 'trigger_right', 0, 1)\
     .with_axis(DeviceAxis.ABS_HAT0X, 'pov_x')\
     .with_axis(DeviceAxis.ABS_HAT0Y, 'pov_y')\
     .with_key(DeviceKey.BTN_A, 'a')\

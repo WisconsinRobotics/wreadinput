@@ -7,93 +7,75 @@ from typing import Dict, Iterator, Optional, Tuple, Union, cast
 import evdev
 import rospy
 
+from .shape import DeviceShape
 from .util import evdev_util
 from .util.evdev_const import DeviceAxis, DeviceEventType, DeviceKey, SyncEvent
 
 class AxisBuf:
     """A buffer storing the state of a single absolute axis on an input device.
     
-    Some normalization is performed so that axis values are uniform across different
-    axes. Usually, the normalized values will be on the interval [-1, 1].
+    Axis values are remapped from a source interval [a, b] to a used-defined target
+    interval [a', b'], which allows for the normalization of joystick values.
     """
 
-    def __init__(self, init_value: float, unmapped_min: float, unmapped_max: float):
+    def __init__(self, init_value: float, from_min: float, from_max: float, to_min: float, to_max: float):
         """Creates a new buffer for an absolute axis with the given properties.
-
-        The `unmapped_min` and `unmapped_max` will be used to remap axis values to a
-        normalized interval in the following way: if the axis is bidirectional (that
-        is, its range is [-x, x] for some x), then it is remapped to the unit ball:
-
-        .. math:: [-x, x] \\mapsto [-1, 1]
-        
-        Otherwise, if the axis is unidirectional (that is, its range is either [0, x]
-        or [x, 0]), then it is remapped to a unit interval in that direction:
-
-        .. math::
-            
-            [0, x] \\mapsto [0, 1]\\\\
-            [x, 0] \\mapsto [-1, 0]
-
-        This normalization allows axes to be treated in a uniform way regardless of
-        the specific device or axis being referred to.
 
         Parameters
         ----------
         init_value : float
-            The initial unnormalized value for the axis.
-        unmapped_min : float
-            The minimum unnormalized value for the axis.
-        unmapped_max : float
-            The maximum unnormalized value for the axis.
+            The initial axis value.
+        from_min : float
+            The minimum value for the source interval.
+        from_max : float
+            The maximum value for the source interval.
+        to_min : float
+            The minimum value for the target interval.
+        to_max : float
+            The maximum value for the target interval.
         """
-        self._offset: float
-        self._scale: float
-        if unmapped_min == 0 and unmapped_max > 0: # unidirectional upwards
-            self._offset = 0
-            self._scale = 1 / unmapped_max
-        elif unmapped_max == 0 and unmapped_min < 0: # unidirectional downwards
-            self._offset = 0
-            self._scale = 1 / abs(unmapped_min)
-        else: # bidirectional
-            self._offset = -(unmapped_min + unmapped_max) / 2
-            self._scale = 2 / (unmapped_max - unmapped_min)
+        # f(x) = (x - src_min) * (tgt_len / src_len) + tgt_min
+        #      = x * (tgt_len / src_len) + (tgt_min - src_min * (tgt_len / src_len))
+        #      = x * scale + offset
+        self._scale = (to_max - to_min) / (from_max - from_min)
+        self._offset = to_min - from_min * self._scale
         self._value = self._remap(init_value)
     
     @property
     def value(self) -> float:
-        """The current normalized value of the axis.
+        """The current remapped value of the axis.
 
         Returns
         -------
         float
-            The normalized axis value.
+            The remapped axis value.
         """
         return self._value
 
     def update(self, unmapped_value: float):
-        """Writes a new value the buffer.
+        """Writes a new value to the buffer.
 
         Parameters
         ----------
         unmapped_value : float
-            The unnormalized axis value.
+            The unmapped axis value.
         """
         self._value = self._remap(unmapped_value)
 
     def _remap(self, unmapped_value: float) -> float:
-        """Normalizes an axis value.
+        """Remaps an axis value to the target interval.
 
         Parameters
         ----------
         unmapped_value : float
-            The unnormalized axis value.
+            The unmapped axis value.
 
         Returns
         -------
         float
-            The normalized axis value.
+            The remapped axis value.
         """
-        return (unmapped_value + self._offset) * self._scale
+        return unmapped_value * self._scale + self._offset
 
 class KeyBuf:
     """A buffer storing the state of a single button on an input device.
@@ -119,7 +101,7 @@ class InputDevice:
     class should make sure to call `kill` on an instance when it is no longer needed.
     """
     
-    def __init__(self, device: Union[str, evdev.InputDevice]):
+    def __init__(self, device: Union[str, evdev.InputDevice], shape: DeviceShape):
         """Constructs a new `InputDevice` instance for the given device.
 
         The device will be polled for capabilities, which will allow for the creation
@@ -132,6 +114,8 @@ class InputDevice:
         device : Union[str, evdev.InputDevice]
             The device, given either as a path to a device file or as an instance of
             `evdev.InputDevice`.
+        shape : DeviceShape
+            The shape of the device.
         
         See Also
         --------
@@ -151,12 +135,17 @@ class InputDevice:
             ev_codes = evdev_util.get_capability_codes(ev_caps)
             if ev_type == DeviceEventType.EV_ABS:
                 for code in ev_codes:
-                    axis_info = self._dev.absinfo(code)
-                    axis_buf = AxisBuf(axis_info.value, axis_info.min, axis_info.max)
+                    axis: DeviceAxis
                     try:
-                        self._axis_cache[DeviceAxis(code)] = axis_buf
+                        axis = DeviceAxis(code)
                     except ValueError:
-                        pass
+                        continue
+                    axis_def = shape.axes.get(axis)
+                    if axis_def is None:
+                        continue
+                    axis_info = self._dev.absinfo(code)
+                    self._axis_cache[axis] = AxisBuf(
+                        axis_info.value, axis_info.min, axis_info.max, axis_def.min_val, axis_def.max_val)
             elif ev_type == DeviceEventType.EV_KEY:
                 init_key_states = set(self._dev.active_keys())
                 for code in ev_codes:
