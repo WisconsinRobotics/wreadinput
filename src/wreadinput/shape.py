@@ -6,7 +6,7 @@ from .util.evdev_const import DeviceAxis, DeviceCaps, DeviceEventType, DeviceKey
 class AxisDefinition:
     """Represents an absolute axis declaration in a device shape."""
     
-    def __init__(self, name: str, min_val: float, max_val: float):
+    def __init__(self, name: str, min_val: float, max_val: float, deadband: float):
         """Creates a new axis definition with the given properties.
 
         Parameters
@@ -21,6 +21,7 @@ class AxisDefinition:
         self.name = name
         self.min_val = min_val
         self.max_val = max_val
+        self.deadband = deadband
 
 class DeviceShape:
     """Represents the set of controls that are characteristic of an input device.
@@ -37,7 +38,7 @@ class DeviceShape:
         self.keys: Dict[DeviceKey, str] = {}
         self._names: Set[str] = set() # track the names that have already been used
 
-    def with_axis(self, axis: DeviceAxis, name: str, min_val: float = -1, max_val: float = 1) -> 'DeviceShape':
+    def with_axis(self, axis: DeviceAxis, name: str, min_val: float = -1, max_val: float = 1, deadband = 0) -> 'DeviceShape':
         """Specifies an absolute axis for the device shape.
 
         Parameters
@@ -61,7 +62,7 @@ class DeviceShape:
         """
         if name in self._names:
             raise ValueError(f'A control named "{name}" already exists!')
-        self.axes[axis] = AxisDefinition(name, min_val, max_val)
+        self.axes[axis] = AxisDefinition(name, min_val, max_val, deadband)
         self._names.add(name)
         return self
 

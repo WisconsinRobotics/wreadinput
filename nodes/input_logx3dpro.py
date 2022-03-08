@@ -4,8 +4,8 @@ from wreadinput import DeviceAxis, DeviceShape, DeviceKey, default_node
 
 # TODO check to make sure these are what actually get mapped by evdev
 SHAPE_LOGX3DPRO = DeviceShape()\
-    .with_axis(DeviceAxis.ABS_X, 'stick_x')\
-    .with_axis(DeviceAxis.ABS_Y, 'stick_y', 1, -1)\
+    .with_axis(DeviceAxis.ABS_X, 'stick_x', deadband = 0.1)\
+    .with_axis(DeviceAxis.ABS_Y, 'stick_y', 1, -1, deadband = 0.1)\
     .with_axis(DeviceAxis.ABS_RZ, 'stick_twist')\
     .with_axis(DeviceAxis.ABS_THROTTLE, 'throttle', 0, 1)\
     .with_axis(DeviceAxis.ABS_HAT0X, 'pov_x')\

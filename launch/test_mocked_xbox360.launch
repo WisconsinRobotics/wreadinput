@@ -1,0 +1,5 @@
+<!-- Runs a mocked Xbox 360 controller node with the default WReady server. -->
+<launch>
+  <node name="wready" pkg="wready" type="default_server.py" output="screen"/>
+  <node name="xbox_test" pkg="wreadinput" type="input_xbox360.py" output="screen"/>
+</launch>

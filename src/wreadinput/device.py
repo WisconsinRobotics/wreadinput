@@ -167,7 +167,7 @@ class InputDevice:
         ------
         ValueError
             If the polling thread has already been started, or if the device has
-            already been shut down.
+            already been shut down. 
         
         Notes
         -----
@@ -283,7 +283,7 @@ class InputDevice:
         poll_thread.start()
         self._poll_thread_ctx = poll_thread, notify_pipe_w
 
-    def get_axis(self, axis: DeviceAxis) -> Optional[float]:
+    def get_axis(self, axis: DeviceAxis, deadband: float) -> Optional[float]:
         """Retrieves the state of an absolute axis.
 
         The axis value will be normalized. See the `AxisBuf` class for more details.

@@ -20,7 +20,7 @@ class ControlPublisher(ABC):
 class AxisPublisher(ControlPublisher):
     """Publishes data about an absolute axis to a ROS topic."""
     
-    def __init__(self, device: InputDevice, axis: DeviceAxis, topic: str):
+    def __init__(self, device: InputDevice, axis: DeviceAxis, topic: str, deadband: float = 0.0):
         """Creates a new axis publisher for the given absolute axis.
 
         Parameters
@@ -35,11 +35,14 @@ class AxisPublisher(ControlPublisher):
         self._device = device
         self._axis = axis
         self._pub = rospy.Publisher(topic, Float32, queue_size=10)
+        self._deadband = deadband
     
     def publish(self):
         state = self._device.get_axis(self._axis)
         if state is not None:
-            self._pub.publish(Float32(state))
+            # f(x) = (x^2 - |x|*d) / (x * (1-d))
+            # can crash if deadband < 0
+            self._pub.publish(Float32(0 if abs(state) <= self._deadband else (state**2-abs(state)*self._deadband)/(1-self._deadband)/state))
 
 class KeyPublisher(ControlPublisher):
     """Publishes data about a button to a ROS topic."""
