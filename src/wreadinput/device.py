@@ -18,7 +18,7 @@ class AxisBuf:
     interval [a', b'], which allows for the normalization of joystick values.
     """
 
-    def __init__(self, init_value: float, from_min: float, from_max: float, to_min: float, to_max: float):
+    def __init__(self, init_value: float, from_min: float, from_max: float, to_min: float, to_max: float, deadband: float):
         """Creates a new buffer for an absolute axis with the given properties.
 
         Parameters
@@ -33,12 +33,26 @@ class AxisBuf:
             The minimum value for the target interval.
         to_max : float
             The maximum value for the target interval.
+        deadband : float
+            The ratio of input area on both sides of the input center that should be centered in the output.
         """
-        # f(x) = (x - src_min) * (tgt_len / src_len) + tgt_min
-        #      = x * (tgt_len / src_len) + (tgt_min - src_min * (tgt_len / src_len))
-        #      = x * scale + offset
-        self._scale = (to_max - to_min) / (from_max - from_min)
-        self._offset = to_min - from_min * self._scale
+
+        # Set up slopes and output offsets, as well as the bounds for the 3 regions introduced by the deadband
+        self._scale = (to_max - to_min) / ((1 - deadband) * (from_max - from_min))
+        self._offset = (from_max + from_min) / 2
+        input_center = (to_max + to_min) / 2
+        self._deadband_high = deadband * (from_max - input_center) + input_center
+        self._deadband_low = deadband * (from_min - input_center) + input_center
+        
+        # Sort the regions in the event of inversion maps
+        self._low_region_lower_bound = min(self._deadband_low, from_min)
+        self._low_region_upper_bound = max(self._deadband_low, from_min)
+        self._high_region_lower_bound = min(self._deadband_high, from_max)
+        self._high_region_upper_bound = max(self._deadband_high, from_max)
+        self._center_region_lower_bound = min(self._low_region_upper_bound, self._high_region_lower_bound)
+        self._center_region_upper_bound = max(self._low_region_upper_bound, self._high_region_lower_bound)
+
+        # Update the output value
         self._value = self._remap(init_value)
     
     @property
@@ -75,7 +89,15 @@ class AxisBuf:
         float
             The remapped axis value.
         """
-        return unmapped_value * self._scale + self._offset
+        # TODO: This is an opportunity to improve code in the future if we migrate the wrover and base station to Python 3.10
+        if self._low_region_lower_bound <= unmapped_value <= self._low_region_upper_bound:
+            return self._scale * (unmapped_value - self._deadband_low) + self._offset
+        elif self._center_region_lower_bound <= unmapped_value <= self._center_region_upper_bound:
+            return self._offset
+        elif self._high_region_lower_bound <= unmapped_value <= self._high_region_upper_bound:
+            return self._scale * (unmapped_value - self._deadband_high) + self._offset
+        else:
+            raise ValueError(f"Value {unmapped_value} is not in the desginated input region of {(self._low_region_lower_bound, self._high_region_upper_bound)}")
 
 class KeyBuf:
     """A buffer storing the state of a single button on an input device.
@@ -146,7 +168,7 @@ class InputDevice:
                         continue
                     axis_info = self._dev.absinfo(code)
                     self._axis_cache[axis] = AxisBuf(
-                        axis_info.value, axis_info.min, axis_info.max, axis_def.min_val, axis_def.max_val)
+                        axis_info.value, axis_info.min, axis_info.max, axis_def.min_val, axis_def.max_val, axis_def.deadband)
             elif ev_type == DeviceEventType.EV_KEY:
                 init_key_states = set(self._dev.active_keys())
                 for code in ev_codes:
