@@ -39,8 +39,8 @@ class AxisBuf:
 
         # Set up slopes and output offsets, as well as the bounds for the 3 regions introduced by the deadband
         self._scale = (to_max - to_min) / ((1 - deadband) * (from_max - from_min))
-        self._offset = (from_max + from_min) / 2
-        input_center = (to_max + to_min) / 2
+        self._offset = (to_max + to_min) / 2
+        input_center = (from_max + from_min) / 2
         self._deadband_high = deadband * (from_max - input_center) + input_center
         self._deadband_low = deadband * (from_min - input_center) + input_center
         
