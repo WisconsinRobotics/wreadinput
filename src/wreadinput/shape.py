@@ -17,6 +17,8 @@ class AxisDefinition:
             The minimum value to output for the axis.
         max_val : float
             The maximum value to output for the axis.
+        deadband : float
+            The area around the center of the input that should be centered in the output, as a percentage.
         """
         self.name = name
         self.min_val = min_val
@@ -49,6 +51,8 @@ class DeviceShape:
             The minimum value to output for the axis.
         max_val : float
             The maximum value to output for the axis.
+        deadband : float
+            The area around the center of the input that should be centered in the output, as a percentage.
 
         Returns
         -------
