@@ -4,10 +4,10 @@ from wreadinput import DeviceAxis, DeviceShape, DeviceKey, default_node
 
 # TODO check to make sure these are what actually get mapped by evdev
 SHAPE_XBOX360 = DeviceShape()\
-    .with_axis(DeviceAxis.ABS_X, 'stick_left_x')\
-    .with_axis(DeviceAxis.ABS_Y, 'stick_left_y')\
-    .with_axis(DeviceAxis.ABS_RX, 'stick_right_x')\
-    .with_axis(DeviceAxis.ABS_RY, 'stick_right_y')\
+    .with_axis(DeviceAxis.ABS_X, 'stick_left_x', deadband = 0.1)\
+    .with_axis(DeviceAxis.ABS_Y, 'stick_left_y', deadband = 0.1)\
+    .with_axis(DeviceAxis.ABS_RX, 'stick_right_x', deadband = 0.1)\
+    .with_axis(DeviceAxis.ABS_RY, 'stick_right_y', deadband = 0.1)\
     .with_axis(DeviceAxis.ABS_Z, 'trigger_left', 0, 1)\
     .with_axis(DeviceAxis.ABS_RZ, 'trigger_right', 0, 1)\
     .with_axis(DeviceAxis.ABS_HAT0X, 'pov_x')\
