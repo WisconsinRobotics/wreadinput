@@ -21,8 +21,9 @@ SHAPE_XBOX360 = DeviceShape()\
     .with_key(DeviceKey.BTN_THUMBL, 'stick_left')\
     .with_key(DeviceKey.BTN_THUMBR, 'stick_right')\
     .with_key(DeviceKey.BTN_START, 'start')\
-    .with_key(DeviceKey.BTN_SELECT, 'select')
-
+    .with_key(DeviceKey.BTN_SELECT, 'select')\
+    .with_key(DeviceKey.BTN_MODE, 'mode')
+    
 # see `wreadinput.default_node` for implementation details
 if __name__ == '__main__':
     default_node.main('input_xbox360', SHAPE_XBOX360)
